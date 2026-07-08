@@ -11,8 +11,8 @@ from rdkit.Chem import rdMolTransforms
 
 # Page Setup
 st.set_page_config(layout="wide")
-st.title("알케인 형태 이성질체: 회전 각도에 따른 에너지 및 확률 분포")
-
+st.title("알케인 형태 이성질체:")
+st.subheader(" 회전 각도에 따른 에너지 및 확률 분포")
 # --- Initialize Session States Safely ---
 if 'theta' not in st.session_state:
     st.session_state.theta = 180
@@ -32,13 +32,113 @@ alkyl_labels = {
     7: r"C$_7$H$_{15}$"
 }
 
+def compute_iupac_labels(mol):
+    """
+    Computes true IUPAC-compliant sequence numbers for alkane carbons.
+    Finds the longest path, strictly handles lowest locant rules for branches, 
+    and applies a visual SMILES backbone tie-breaker for symmetrical isomers.
+    """
+    adj = {}
+    c_indices = []
+    for atom in mol.GetAtoms():
+        if atom.GetSymbol() == 'C':
+            idx = atom.GetIdx()
+            c_indices.append(idx)
+            adj[idx] = [nbr.GetIdx() for nbr in atom.GetNeighbors() if nbr.GetSymbol() == 'C']
+            
+    if not c_indices:
+        return {}
+        
+    terminals = [i for i in c_indices if len(adj[i]) <= 1]
+    if not terminals:  
+        terminals = c_indices
+        
+    all_paths = []
+    def dfs(curr, target, path, visited):
+        if curr == target:
+            all_paths.append(list(path))
+            return
+        for nbr in adj[curr]:
+            if nbr not in visited:
+                visited.add(nbr)
+                path.append(nbr)
+                dfs(nbr, target, path, visited)
+                path.pop()
+                visited.remove(nbr)
+
+    for i in range(len(terminals)):
+        for j in range(i + 1, len(terminals)):
+            start, end = terminals[i], terminals[j]
+            dfs(start, end, [start], {start})
+            
+    if not all_paths:
+        return {idx: f"C{i+1}" for i, idx in enumerate(c_indices)}
+        
+    # Find longest paths (Parent chain candidates)
+    max_len = max(len(p) for p in all_paths)
+    longest_paths = [p for p in all_paths if len(p) == max_len]
+    
+    best_path = None
+    best_locants = None
+    best_num_branches = -1
+    best_spread = -1
+    
+    for path in longest_paths:
+        for p in [path, path[::-1]]:
+            locants = []
+            for step_idx, c_idx in enumerate(p):
+                for nbr in adj[c_idx]:
+                    if nbr not in p:
+                        locants.append(step_idx + 1)
+            locants.sort()
+            
+            num_branches = len(locants)
+            # Mathematical spread of raw indices (identifies the SMILES backbone)
+            spread = max(p) - min(p) 
+            
+            if best_path is None:
+                best_path = p
+                best_locants = locants
+                best_num_branches = num_branches
+                best_spread = spread
+            else:
+                # IUPAC Rule 1: Maximize number of branches attached to main chain
+                if num_branches > best_num_branches:
+                    best_path = p
+                    best_locants = locants
+                    best_num_branches = num_branches
+                    best_spread = spread
+                elif num_branches == best_num_branches:
+                    # IUPAC Rule 2: Lowest possible locant sequence
+                    if locants < best_locants:
+                        best_path = p
+                        best_locants = locants
+                        best_spread = spread
+                    elif locants == best_locants:
+                        # VISUAL TIE-BREAKER: Prioritize the straight SMILES backbone over bent identical chains
+                        if spread > best_spread:
+                            best_path = p
+                            best_locants = locants
+                            best_spread = spread
+
+    # Construct complete index mapping dictionary
+    mapping = {}
+    for step_idx, c_idx in enumerate(best_path):
+        mapping[c_idx] = f"C{step_idx + 1}"
+        
+    branch_counter = len(best_path) + 1
+    for c_idx in c_indices:
+        if c_idx not in mapping:
+            mapping[c_idx] = f"C{branch_counter}"
+            branch_counter += 1
+            
+    return mapping
+
 def get_substituent_label(mol, nbr_idx, root_idx):
-    """Dynamically determines the alkyl formula for a specific branch vertex."""
     atom = mol.GetAtomWithIdx(nbr_idx)
     if atom.GetSymbol() == 'H':
         return "H"
     
-    # Count total carbons belonging purely to this specific substituent branch
     visited = {root_idx}
     queue = [nbr_idx]
     c_count = 0
@@ -54,37 +154,30 @@ def get_substituent_label(mol, nbr_idx, root_idx):
     return alkyl_labels.get(c_count, r"C$_n$H$_{2n+1}$")
 
 def draw_2d_newman(ax, front_subs, back_subs, text_color="black"):
-    """Draws a dynamically generated Newman projection using exact 3D angles."""
     ax.set_aspect("equal")
     ax.axis("off")
     ax.set_xlim(-1.6, 1.6)
     ax.set_ylim(-1.6, 1.6)
     
-    # 1. Draw Back Bonds (drawn out from center, layered behind front circle)
     for angle, label in back_subs:
         rad = np.radians(angle)
         ax.plot([0, 1.15 * np.cos(rad)], [0, 1.15 * np.sin(rad)], color="darkgray", lw=2.5, zorder=1)
     
-    # 2. Draw Front Central Circle
     circle = plt.Circle((0, 0), 0.5, edgecolor=text_color, facecolor="white", fill=True, lw=2, zorder=2)
     ax.add_patch(circle)
     
-    # 3. Draw Front Bonds (radiate strictly from the center hub)
     for angle, label in front_subs:
         rad = np.radians(angle)
         ax.plot([0, 1.0 * np.cos(rad)], [0, 1.0 * np.sin(rad)], color=text_color, lw=3.5, zorder=3)
         
-    # Central intersection vertex point
     ax.scatter(0, 0, color=text_color, s=90, zorder=4)
     
-    # 4. Render Front Labels
     for angle, label in front_subs:
         rad = np.radians(angle)
         x = 1.32 * np.cos(rad)
         y = 1.32 * np.sin(rad)
         ax.text(x, y, label, color=text_color, fontsize=12, fontweight="black", ha="center", va="center", zorder=5)
         
-    # 5. Render Back Labels
     for angle, label in back_subs:
         rad = np.radians(angle)
         x = 1.48 * np.cos(rad)
@@ -92,7 +185,6 @@ def draw_2d_newman(ax, front_subs, back_subs, text_color="black"):
         ax.text(x, y, label, color="gray", fontsize=11, fontweight="bold", ha="center", va="center", zorder=5)
 
 def calculate_dynamic_energy(angle_deg, front_size, back_size):
-    """Calculates torsional potential strain energy ensuring a strict >= 0.0 baseline."""
     rad = np.radians(angle_deg)
     if front_size == 0 or back_size == 0:
         return 7.0 + 7.0 * np.cos(3 * rad)
@@ -123,7 +215,7 @@ def get_fragment_size(mol, start_idx, avoid_idx):
     return max(0, size - 1)
 
 # --- Left Sidebar: User Controls ---
-st.sidebar.header("Simulation Settings")
+st.sidebar.header("시뮬레이터 설정")
 
 alkanes = {
     "Butane (n-Butane)": "CCCC",
@@ -143,6 +235,8 @@ mol_choice = st.sidebar.selectbox("1. 알케인 분자 선택", list(alkanes.key
 smiles = alkanes[mol_choice]
 mol_base = Chem.MolFromSmiles(smiles)
 
+iupac_labels = compute_iupac_labels(mol_base)
+
 bond_options = []
 bond_indices = []
 for bond in mol_base.GetBonds():
@@ -150,7 +244,9 @@ for bond in mol_base.GetBonds():
         a1 = bond.GetBeginAtomIdx()
         a2 = bond.GetEndAtomIdx()
         if mol_base.GetAtomWithIdx(a1).GetSymbol() == 'C' and mol_base.GetAtomWithIdx(a2).GetSymbol() == 'C':
-            bond_options.append(f"C{a1+1}-C{a2+1}")
+            label1 = iupac_labels.get(a1, f"C{a1+1}")
+            label2 = iupac_labels.get(a2, f"C{a2+1}")
+            bond_options.append(f"{label1}-{label2}")
             bond_indices.append((a1, a2))
 
 bond_choice_str = st.sidebar.selectbox("2. 뉴먼 투영법 적용할 결합 선택", bond_options)
@@ -162,42 +258,30 @@ temp = st.sidebar.slider("3. 온도 (Kelvin)", min_value=100, max_value=600, val
 front_group_size = get_fragment_size(mol_base, idx2, idx3)
 back_group_size = get_fragment_size(mol_base, idx3, idx2)
 
-# --- UPDATED LAYOUT ORDER: Manual Angle Adjustments positioned higher up ---
 st.sidebar.markdown("---")
-st.sidebar.markdown("**4. 회전 각도 조정**")
+st.sidebar.markdown("**4. 각도 조정**")
 
 theta_manual = st.sidebar.slider("슬라이드바:", 0, 360, value=int(st.session_state.theta))
 if not st.session_state.animating:
     st.session_state.theta = theta_manual
 
-# 6-Button Grid Layout underneath the primary slider
 col_r1_1, col_r1_2, col_r1_3 = st.sidebar.columns(3)
-if col_r1_1.button("0°", use_container_width=True, help="Fully Eclipsed"): 
-    st.session_state.theta = 0
-if col_r1_2.button("60°", use_container_width=True, help="Gauche / Staggered"): 
-    st.session_state.theta = 60
-if col_r1_3.button("120°", use_container_width=True, help="Eclipsed"): 
-    st.session_state.theta = 120
+if col_r1_1.button("0° 💥", use_container_width=True): st.session_state.theta = 0
+if col_r1_2.button("60° 🍀", use_container_width=True): st.session_state.theta = 60
+if col_r1_3.button("120° 💥", use_container_width=True): st.session_state.theta = 120
 
 col_r2_1, col_r2_2, col_r2_3 = st.sidebar.columns(3)
-if col_r2_1.button("180°", use_container_width=True, help="Anti / Staggered"): 
-    st.session_state.theta = 180
-if col_r2_2.button("240°", use_container_width=True, help="Eclipsed"): 
-    st.session_state.theta = 240
-if col_r2_3.button("300°", use_container_width=True, help="Gauche / Staggered"): 
-    st.session_state.theta = 300
+if col_r2_1.button("180° ✨", use_container_width=True): st.session_state.theta = 180
+if col_r2_2.button("240° 💥", use_container_width=True): st.session_state.theta = 240
+if col_r2_3.button("300° 🍀", use_container_width=True): st.session_state.theta = 300
 
-# --- UPDATED LAYOUT ORDER: Animation Drive sent to the bottom ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("**5. 자동 애니메이션**")
 
 col_play, col_stop = st.sidebar.columns(2)
-if col_play.button("▶️ Play", use_container_width=True):
-    st.session_state.animating = True
-if col_stop.button("⏹️ Stop", use_container_width=True):
-    st.session_state.animating = False
+if col_play.button("▶️ Play", use_container_width=True): st.session_state.animating = True
+if col_stop.button("⏹️ Stop", use_container_width=True): st.session_state.animating = False
 
-# --- THERMODYNAMIC PROBABILITY ENGINE (Boltzmann Calculation) ---
 R_gas = 0.008314  
 all_angles = np.arange(0, 361, 1)
 all_energies = np.array([calculate_dynamic_energy(a, front_group_size, back_group_size) for a in all_angles])
@@ -210,10 +294,8 @@ current_theta = st.session_state.theta
 current_energy = calculate_dynamic_energy(current_theta, front_group_size, back_group_size)
 current_prob = probabilities[int(current_theta) % 360]
 
-# --- RENDER LAYOUT SYSTEM ---
 col1, col2 = st.columns(2)
 
-# Top Left: Molecular Viewer
 with col1:
     st.subheader(f"3D 구조(카메라 각도 조정 + 확대/축소 가능)")
     mol = Chem.MolFromSmiles(smiles)
@@ -266,7 +348,6 @@ with col1:
     Twist_matrix[0:3, 0:3] = np.array([[ct, -st_val, 0], [st_val, ct, 0], [0, 0, 1]])
     rdMolTransforms.TransformConformer(conf, Twist_matrix)
 
-    # Dynamic coordinate parsing for the custom Newman projection
     front_subs = []
     for nbr in front_neighbors:
         pos = conf.GetAtomPosition(nbr)
@@ -290,77 +371,44 @@ with col1:
     for i in range(num_atoms):
         if mol.GetAtomWithIdx(i).GetSymbol() == 'C':
             pos = conf.GetAtomPosition(i)
-            view.addLabel(f'C{i+1}', {
+            iupac_text = iupac_labels.get(i, f"C{i+1}")
+            view.addLabel(iupac_text, {
                 'position': {'x': pos.x, 'y': pos.y, 'z': pos.z},
                 'fontColor': 'white', 'backgroundColor': 'black', 'fontsize': 12, 'backgroundOpacity': 0.7, 'alignment': 'center'
             })
     view.zoomTo()
     showmol(view, height=320, width=450)
 
-# Top Right: Newman Diagram
 with col2:
-    st.subheader(f"뉴먼 투영법 다이어그램")
+    st.subheader(f"뉴먼 투영법")
     fig_newman, ax_newman = plt.subplots(figsize=(4.2, 4.2), facecolor="white")
     draw_2d_newman(ax_newman, front_subs, back_subs, text_color="black")
     st.pyplot(fig_newman)
 
-# --- SPLIT ANALYSIS PLOTS SECTION ---
 st.markdown("---")
 col_graph1, col_graph2 = st.columns(2)
 
-# Graph 1: Torsional Potential Energy vs Angle
 with col_graph1:
     st.subheader("회전 각도에 따른 스트레인 에너지")
     fig_energy = go.Figure()
-    
-    fig_energy.add_trace(go.Scatter(
-        x=all_angles, y=all_energies,
-        mode='lines', line=dict(color='#FF4B4B', width=3),
-        name='Potential Energy'
-    ))
-    fig_energy.add_trace(go.Scatter(
-        x=[current_theta], y=[current_energy],
-        mode='markers', marker=dict(color='black', size=12, line=dict(color='white', width=2)),
-        name='Current State', showlegend=False
-    ))
-    
-    fig_energy.update_layout(
-        xaxis=dict(title="Dihedral Angle (°)", range=[0, 360], tickmode='linear', tick0=0, dtick=60),
-        yaxis=dict(title="Relative Energy (kJ/mol)", range=[0, max(all_energies) * 1.1]),
-        margin=dict(l=40, r=40, t=20, b=40), height=350, template="plotly_white"
-    )
+    fig_energy.add_trace(go.Scatter(x=all_angles, y=all_energies, mode='lines', line=dict(color='#FF4B4B', width=3)))
+    fig_energy.add_trace(go.Scatter(x=[current_theta], y=[current_energy], mode='markers', marker=dict(color='black', size=12, line=dict(color='white', width=2))))
+    fig_energy.update_layout(xaxis=dict(title="Dihedral Angle (°)", range=[0, 360], dtick=60), yaxis=dict(title="Relative Energy (kJ/mol)", range=[0, max(all_energies) * 1.1]), margin=dict(l=40, r=40, t=20, b=40), height=350, template="plotly_white", showlegend=False)
     st.plotly_chart(fig_energy, use_container_width=True)
 
-# Graph 2: Thermodynamic Probability Population vs Angle
 with col_graph2:
     st.subheader("회전 각도에 따른 형태 이성질체 분포 확률")
     fig_prob = go.Figure()
-    
-    fig_prob.add_trace(go.Scatter(
-        x=all_angles, y=probabilities,
-        mode='lines', line=dict(color='#0068C9', width=3),
-        name='Probability'
-    ))
-    fig_prob.add_trace(go.Scatter(
-        x=[current_theta], y=[current_prob],
-        mode='markers', marker=dict(color='black', size=12, line=dict(color='white', width=2)),
-        name='Current State', showlegend=False
-    ))
-    
-    fig_prob.update_layout(
-        xaxis=dict(title="Dihedral Angle (°)", range=[0, 360], tickmode='linear', tick0=0, dtick=60),
-        yaxis=dict(title="Raw Probability Value (0.0 - 1.0)", range=[0, max(probabilities) * 1.15]),
-        margin=dict(l=40, r=40, t=20, b=40), height=350, template="plotly_white"
-    )
+    fig_prob.add_trace(go.Scatter(x=all_angles, y=probabilities, mode='lines', line=dict(color='#0068C9', width=3)))
+    fig_prob.add_trace(go.Scatter(x=[current_theta], y=[current_prob], mode='markers', marker=dict(color='black', size=12, line=dict(color='white', width=2))))
+    fig_prob.update_layout(xaxis=dict(title="Dihedral Angle (°)", range=[0, 360], dtick=60), yaxis=dict(title="Raw Probability Value (0.0 - 1.0)", range=[0, max(probabilities) * 1.15]), margin=dict(l=40, r=40, t=20, b=40), height=350, template="plotly_white", showlegend=False)
     st.plotly_chart(fig_prob, use_container_width=True)
 
-# --- 4. DATA TELEMETRY READOUTS ---
 col_m1, col_m2, col_m3 = st.columns(3)
 col_m1.metric("현재 회전 각도", f"{current_theta}°")
 col_m2.metric("총 스트레인 에너지", f"{current_energy:.2f} kJ/mol")
 col_m3.metric("확률", f"{current_prob:.5f}")
 
-# --- RE-RUN ANIMATION DRIVER ---
 if st.session_state.animating:
     time.sleep(0.01)
     st.session_state.theta = (st.session_state.theta + 6) % 360
