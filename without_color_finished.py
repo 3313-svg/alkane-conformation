@@ -11,7 +11,7 @@ from rdkit.Chem import rdMolTransforms
 
 # Page Setup
 st.set_page_config(layout="wide")
-st.title("🔬 Alkane Conformation: Energy vs. Raw Probability Analysis")
+st.title("알케인 형태 이성질체: 회전 각도에 따른 에너지 및 확률 분포")
 
 # --- Initialize Session States Safely ---
 if 'theta' not in st.session_state:
@@ -139,7 +139,7 @@ alkanes = {
     "Heptane (n-Heptane)": "CCCCCCC"
 }
 
-mol_choice = st.sidebar.selectbox("1. Select Molecule", list(alkanes.keys()))
+mol_choice = st.sidebar.selectbox("1. 알케인 분자 선택", list(alkanes.keys()))
 smiles = alkanes[mol_choice]
 mol_base = Chem.MolFromSmiles(smiles)
 
@@ -153,7 +153,7 @@ for bond in mol_base.GetBonds():
             bond_options.append(f"C{a1+1}-C{a2+1}")
             bond_indices.append((a1, a2))
 
-bond_choice_str = st.sidebar.selectbox("2. Select Bond to View", bond_options)
+bond_choice_str = st.sidebar.selectbox("2. 뉴먼 투영법 적용할 결합 선택", bond_options)
 bond_index = bond_options.index(bond_choice_str)
 idx2, idx3 = bond_indices[bond_index]
 
@@ -172,29 +172,29 @@ if not st.session_state.animating:
 
 # 6-Button Grid Layout underneath the primary slider
 col_r1_1, col_r1_2, col_r1_3 = st.sidebar.columns(3)
-if col_r1_1.button("0° 💥", use_container_width=True, help="Fully Eclipsed"): 
+if col_r1_1.button("0°", use_container_width=True, help="Fully Eclipsed"): 
     st.session_state.theta = 0
-if col_r1_2.button("60° 🍀", use_container_width=True, help="Gauche / Staggered"): 
+if col_r1_2.button("60°", use_container_width=True, help="Gauche / Staggered"): 
     st.session_state.theta = 60
-if col_r1_3.button("120° 💥", use_container_width=True, help="Eclipsed"): 
+if col_r1_3.button("120°", use_container_width=True, help="Eclipsed"): 
     st.session_state.theta = 120
 
 col_r2_1, col_r2_2, col_r2_3 = st.sidebar.columns(3)
-if col_r2_1.button("180° ✨", use_container_width=True, help="Anti / Staggered"): 
+if col_r2_1.button("180°", use_container_width=True, help="Anti / Staggered"): 
     st.session_state.theta = 180
-if col_r2_2.button("240° 💥", use_container_width=True, help="Eclipsed"): 
+if col_r2_2.button("240°", use_container_width=True, help="Eclipsed"): 
     st.session_state.theta = 240
-if col_r2_3.button("300° 🍀", use_container_width=True, help="Gauche / Staggered"): 
+if col_r2_3.button("300°", use_container_width=True, help="Gauche / Staggered"): 
     st.session_state.theta = 300
 
 # --- UPDATED LAYOUT ORDER: Animation Drive sent to the bottom ---
 st.sidebar.markdown("---")
-st.sidebar.markdown("**5. Animation Controls**")
+st.sidebar.markdown("**5. 자동 애니메이션**")
 
 col_play, col_stop = st.sidebar.columns(2)
-if col_play.button("▶️ Play Animation", use_container_width=True):
+if col_play.button("▶️ Play", use_container_width=True):
     st.session_state.animating = True
-if col_stop.button("⏹️ Stop Animation", use_container_width=True):
+if col_stop.button("⏹️ Stop", use_container_width=True):
     st.session_state.animating = False
 
 # --- THERMODYNAMIC PROBABILITY ENGINE (Boltzmann Calculation) ---
@@ -215,7 +215,7 @@ col1, col2 = st.columns(2)
 
 # Top Left: Molecular Viewer
 with col1:
-    st.subheader(f"Interactive 3D Structure")
+    st.subheader(f"3D 구조(카메라 각도 조정 + 확대/축소 가능)")
     mol = Chem.MolFromSmiles(smiles)
     mol = Chem.AddHs(mol)
     
@@ -299,7 +299,7 @@ with col1:
 
 # Top Right: Newman Diagram
 with col2:
-    st.subheader(f"Newman Projection")
+    st.subheader(f"뉴먼 투영법 다이어그램")
     fig_newman, ax_newman = plt.subplots(figsize=(4.2, 4.2), facecolor="white")
     draw_2d_newman(ax_newman, front_subs, back_subs, text_color="black")
     st.pyplot(fig_newman)
@@ -310,7 +310,7 @@ col_graph1, col_graph2 = st.columns(2)
 
 # Graph 1: Torsional Potential Energy vs Angle
 with col_graph1:
-    st.subheader("📈 Potential Energy Profile")
+    st.subheader("회전 각도에 따른 스트레인 에너지")
     fig_energy = go.Figure()
     
     fig_energy.add_trace(go.Scatter(
@@ -333,7 +333,7 @@ with col_graph1:
 
 # Graph 2: Thermodynamic Probability Population vs Angle
 with col_graph2:
-    st.subheader("📊 Conformation Probability Density")
+    st.subheader("회전 각도에 따른 형태 이성질체 분포 확률")
     fig_prob = go.Figure()
     
     fig_prob.add_trace(go.Scatter(
@@ -356,9 +356,9 @@ with col_graph2:
 
 # --- 4. DATA TELEMETRY READOUTS ---
 col_m1, col_m2, col_m3 = st.columns(3)
-col_m1.metric("Current Angle", f"{current_theta}°")
-col_m2.metric("Steric Strain Energy", f"{current_energy:.2f} kJ/mol")
-col_m3.metric("Raw Boltzmann Probability", f"{current_prob:.5f}")
+col_m1.metric("현재 회전 각도", f"{current_theta}°")
+col_m2.metric("총 스트레인 에너지", f"{current_energy:.2f} kJ/mol")
+col_m3.metric("확률", f"{current_prob:.5f}")
 
 # --- RE-RUN ANIMATION DRIVER ---
 if st.session_state.animating:
