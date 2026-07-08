@@ -258,14 +258,14 @@ st.sidebar.slider("슬라이드바:", 0, 360, key="theta")
 
 col_r1_1, col_r1_2, col_r1_3 = st.sidebar.columns(3)
 # On_click callbacks to update state instantly before a UI rerun
-col_r1_1.button("0° 💥", use_container_width=True, on_click=update_theta, args=(0,))
-col_r1_2.button("60° 🍀", use_container_width=True, on_click=update_theta, args=(60,))
-col_r1_3.button("120° 💥", use_container_width=True, on_click=update_theta, args=(120,))
+col_r1_1.button("0°", use_container_width=True, on_click=update_theta, args=(0,))
+col_r1_2.button("60°", use_container_width=True, on_click=update_theta, args=(60,))
+col_r1_3.button("120°", use_container_width=True, on_click=update_theta, args=(120,))
 
 col_r2_1, col_r2_2, col_r2_3 = st.sidebar.columns(3)
-col_r2_1.button("180° ✨", use_container_width=True, on_click=update_theta, args=(180,))
-col_r2_2.button("240° 💥", use_container_width=True, on_click=update_theta, args=(240,))
-col_r2_3.button("300° 🍀", use_container_width=True, on_click=update_theta, args=(300,))
+col_r2_1.button("180°", use_container_width=True, on_click=update_theta, args=(180,))
+col_r2_2.button("240°", use_container_width=True, on_click=update_theta, args=(240,))
+col_r2_3.button("300°", use_container_width=True, on_click=update_theta, args=(300,))
 
 R_gas = 0.008314  
 all_angles = np.arange(0, 361, 1)
