@@ -157,16 +157,16 @@ bond_choice_str = st.sidebar.selectbox("2. 뉴먼 투영법 적용할 결합 선
 bond_index = bond_options.index(bond_choice_str)
 idx2, idx3 = bond_indices[bond_index]
 
-temp = st.sidebar.slider("3. Temperature (Kelvin)", min_value=100, max_value=600, value=298, step=10)
+temp = st.sidebar.slider("3. 온도 (Kelvin)", min_value=100, max_value=600, value=298, step=10)
 
 front_group_size = get_fragment_size(mol_base, idx2, idx3)
 back_group_size = get_fragment_size(mol_base, idx3, idx2)
 
 # --- UPDATED LAYOUT ORDER: Manual Angle Adjustments positioned higher up ---
 st.sidebar.markdown("---")
-st.sidebar.markdown("**4. Angle Configuration**")
+st.sidebar.markdown("**4. 회전 각도 조정**")
 
-theta_manual = st.sidebar.slider("Fine-tune Angle manually:", 0, 360, value=int(st.session_state.theta))
+theta_manual = st.sidebar.slider("슬라이드바:", 0, 360, value=int(st.session_state.theta))
 if not st.session_state.animating:
     st.session_state.theta = theta_manual
 
