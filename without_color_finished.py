@@ -266,14 +266,14 @@ if not st.session_state.animating:
     st.session_state.theta = theta_manual
 
 col_r1_1, col_r1_2, col_r1_3 = st.sidebar.columns(3)
-if col_r1_1.button("0° 💥", use_container_width=True): st.session_state.theta = 0
-if col_r1_2.button("60° 🍀", use_container_width=True): st.session_state.theta = 60
-if col_r1_3.button("120° 💥", use_container_width=True): st.session_state.theta = 120
+if col_r1_1.button("0°", use_container_width=True): st.session_state.theta = 0
+if col_r1_2.button("60°", use_container_width=True): st.session_state.theta = 60
+if col_r1_3.button("120°", use_container_width=True): st.session_state.theta = 120
 
 col_r2_1, col_r2_2, col_r2_3 = st.sidebar.columns(3)
-if col_r2_1.button("180° ✨", use_container_width=True): st.session_state.theta = 180
-if col_r2_2.button("240° 💥", use_container_width=True): st.session_state.theta = 240
-if col_r2_3.button("300° 🍀", use_container_width=True): st.session_state.theta = 300
+if col_r2_1.button("180°", use_container_width=True): st.session_state.theta = 180
+if col_r2_2.button("240°", use_container_width=True): st.session_state.theta = 240
+if col_r2_3.button("300°", use_container_width=True): st.session_state.theta = 300
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**5. 자동 애니메이션**")
