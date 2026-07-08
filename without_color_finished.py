@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import py3Dmol
-import time
 from stmol import showmol
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -13,11 +12,14 @@ from rdkit.Chem import rdMolTransforms
 st.set_page_config(layout="wide")
 st.title("알케인 형태 이성질체:")
 st.subheader(" 회전 각도에 따른 에너지 및 확률 분포")
+
 # --- Initialize Session States Safely ---
 if 'theta' not in st.session_state:
     st.session_state.theta = 180
-if 'animating' not in st.session_state:
-    st.session_state.animating = False
+
+# --- Callback Function to Fix the Double-Click Bug ---
+def update_theta(new_angle):
+    st.session_state.theta = new_angle
 
 # --- Definitions and Functions ---
 # Proper chemical formulas with mathematical subscript formatting
@@ -33,11 +35,6 @@ alkyl_labels = {
 }
 
 def compute_iupac_labels(mol):
-    """
-    Computes true IUPAC-compliant sequence numbers for alkane carbons.
-    Finds the longest path, strictly handles lowest locant rules for branches, 
-    and applies a visual SMILES backbone tie-breaker for symmetrical isomers.
-    """
     adj = {}
     c_indices = []
     for atom in mol.GetAtoms():
@@ -93,7 +90,6 @@ def compute_iupac_labels(mol):
             locants.sort()
             
             num_branches = len(locants)
-            # Mathematical spread of raw indices (identifies the SMILES backbone)
             spread = max(p) - min(p) 
             
             if best_path is None:
@@ -102,26 +98,22 @@ def compute_iupac_labels(mol):
                 best_num_branches = num_branches
                 best_spread = spread
             else:
-                # IUPAC Rule 1: Maximize number of branches attached to main chain
                 if num_branches > best_num_branches:
                     best_path = p
                     best_locants = locants
                     best_num_branches = num_branches
                     best_spread = spread
                 elif num_branches == best_num_branches:
-                    # IUPAC Rule 2: Lowest possible locant sequence
                     if locants < best_locants:
                         best_path = p
                         best_locants = locants
                         best_spread = spread
                     elif locants == best_locants:
-                        # VISUAL TIE-BREAKER: Prioritize the straight SMILES backbone over bent identical chains
                         if spread > best_spread:
                             best_path = p
                             best_locants = locants
                             best_spread = spread
 
-    # Construct complete index mapping dictionary
     mapping = {}
     for step_idx, c_idx in enumerate(best_path):
         mapping[c_idx] = f"C{step_idx + 1}"
@@ -261,26 +253,19 @@ back_group_size = get_fragment_size(mol_base, idx3, idx2)
 st.sidebar.markdown("---")
 st.sidebar.markdown("**4. 각도 조정**")
 
-theta_manual = st.sidebar.slider("슬라이드바:", 0, 360, value=int(st.session_state.theta))
-if not st.session_state.animating:
-    st.session_state.theta = theta_manual
+# Slider strictly bound to 'st.session_state.theta' using the key argument
+st.sidebar.slider("슬라이드바:", 0, 360, key="theta")
 
 col_r1_1, col_r1_2, col_r1_3 = st.sidebar.columns(3)
-if col_r1_1.button("0°", use_container_width=True): st.session_state.theta = 0
-if col_r1_2.button("60°", use_container_width=True): st.session_state.theta = 60
-if col_r1_3.button("120°", use_container_width=True): st.session_state.theta = 120
+# On_click callbacks to update state instantly before a UI rerun
+col_r1_1.button("0° 💥", use_container_width=True, on_click=update_theta, args=(0,))
+col_r1_2.button("60° 🍀", use_container_width=True, on_click=update_theta, args=(60,))
+col_r1_3.button("120° 💥", use_container_width=True, on_click=update_theta, args=(120,))
 
 col_r2_1, col_r2_2, col_r2_3 = st.sidebar.columns(3)
-if col_r2_1.button("180°", use_container_width=True): st.session_state.theta = 180
-if col_r2_2.button("240°", use_container_width=True): st.session_state.theta = 240
-if col_r2_3.button("300°", use_container_width=True): st.session_state.theta = 300
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("**5. 자동 애니메이션**")
-
-col_play, col_stop = st.sidebar.columns(2)
-if col_play.button("▶️ Play", use_container_width=True): st.session_state.animating = True
-if col_stop.button("⏹️ Stop", use_container_width=True): st.session_state.animating = False
+col_r2_1.button("180° ✨", use_container_width=True, on_click=update_theta, args=(180,))
+col_r2_2.button("240° 💥", use_container_width=True, on_click=update_theta, args=(240,))
+col_r2_3.button("300° 🍀", use_container_width=True, on_click=update_theta, args=(300,))
 
 R_gas = 0.008314  
 all_angles = np.arange(0, 361, 1)
@@ -408,8 +393,3 @@ col_m1, col_m2, col_m3 = st.columns(3)
 col_m1.metric("현재 회전 각도", f"{current_theta}°")
 col_m2.metric("총 스트레인 에너지", f"{current_energy:.2f} kJ/mol")
 col_m3.metric("확률", f"{current_prob:.5f}")
-
-if st.session_state.animating:
-    time.sleep(0.01)
-    st.session_state.theta = (st.session_state.theta + 6) % 360
-    st.rerun()
