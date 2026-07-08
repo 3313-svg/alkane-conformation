@@ -5,3 +5,5 @@ plotly
 py3Dmol
 stmol
 rdkit
+ipywidgets
+ipython-genutils
