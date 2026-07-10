@@ -18,6 +18,10 @@ st.title("Alkane & Cycloalkane Conformational Analysis Simulator")
 if 'theta' not in st.session_state:
     st.session_state.theta = 180
 
+# --- Callback function to update theta safely without StreamlitAPIException ---
+def update_theta(val):
+    st.session_state.theta = val
+
 # --- Helper Function with Container Wrapping to Fix Caching Bug ---
 def render_robust_3d_view(view, height=320, width=450, unique_key=""):
     """
@@ -268,6 +272,22 @@ def get_fragment_size(mol, start_idx, avoid_idx):
                     queue.append(nbr.GetIdx())
     return max(0, size - 1)
 
+_conformation_descriptions = [
+    ("Twist-Boat", "A slightly twisted version of the boat form that relieves some torsional strain. More stable than the boat, but less stable than the chair."),
+    ("Half-Chair", "A transition state between the chair and boat forms, with some ring atoms out of plane, giving it significant strain energy."),
+    ("Boat", "Two 'prow' carbons point the same direction, causing flagpole steric repulsion and torsional strain, giving it high energy."),
+    ("Chair", "The most stable form: all bond angles are close to the ideal 109.5 degrees, minimizing both angle strain and torsional strain."),
+    ("Envelope", "One ring carbon sits out of the plane formed by the rest, the characteristic shape cyclopentane adopts to reduce angle strain."),
+    ("Planar", "All atoms lie in a single plane. Relatively stable for small rings, but disfavored in larger rings due to torsional strain."),
+    ("Puckered", "The ring bends out of plane, which reduces torsional strain compared to a fully planar form and is therefore more stable."),
+]
+
+def get_conformation_description(name):
+    for keyword, desc in _conformation_descriptions:
+        if keyword in name:
+            return desc
+    return "The relative stability of this ring conformation is determined by the balance between angle strain and torsional strain."
+
 def generate_cycloalkane_conformer(smiles, coords):
     mol = Chem.MolFromSmiles(smiles)
     mol = Chem.AddHs(mol)
@@ -286,6 +306,7 @@ def generate_cycloalkane_conformer(smiles, coords):
             ff.Minimize(maxIts=500)
     return mol
 
+
 # =========================================================================
 # MAIN VIEW SELECTOR
 # =========================================================================
@@ -297,10 +318,12 @@ view_choice = st.radio(
 )
 st.markdown("---")
 
+
 # =========================================================================
-# VIEW 1: NON-CYCLIC ALKANES
+# VIEW 1 FRAGMENT FUNCTION
 # =========================================================================
-if view_choice == "🧬 Non-Cyclic Alkanes (Single Bond Rotation)":
+@st.fragment
+def render_non_cyclic_view():
     col_sidebar, col_main = st.columns([1, 3])
     
     with col_sidebar:
@@ -336,10 +359,6 @@ if view_choice == "🧬 Non-Cyclic Alkanes (Single Bond Rotation)":
         st.markdown("**4. Adjust Dihedral Angle**")
 
         st.slider("Slider:", 0, 360, key="theta")
-
-        # 세션 상태(theta)를 변경하기 위한 안전한 콜백 함수 정의
-        def update_theta(val):
-            st.session_state.theta = val
 
         col_r1_1, col_r1_2, col_r1_3 = st.columns(3)
         col_r1_1.button("0° 💥", use_container_width=True, key="btn_0", on_click=update_theta, args=(0,))
@@ -485,11 +504,12 @@ if view_choice == "🧬 Non-Cyclic Alkanes (Single Bond Rotation)":
         col_m2.metric("Total Strain Energy", f"{current_energy:.2f} kJ/mol")
         col_m3.metric("Probability Density", f"{current_prob:.5f}")
 
-# =========================================================================
-# VIEW 2: CYCLOALKANES
-# =========================================================================
-elif view_choice == "🔄 Cyclic Alkanes (Ring Conformations)":
 
+# =========================================================================
+# VIEW 2 FRAGMENT FUNCTION
+# =========================================================================
+@st.fragment
+def render_cyclic_view():
     col_sidebar, col_main = st.columns([1, 3])
 
     with col_sidebar:
@@ -507,6 +527,7 @@ elif view_choice == "🔄 Cyclic Alkanes (Ring Conformations)":
             ring_step = st.slider("Conformation Transition (Progress):", min_value=0, max_value=len(flip_steps) - 1, value=0, key="tab2_slider")
         else:
             ring_step = 0
+            st.info("💡 Cyclopropane is geometrically constrained and highly rigid due to ring strain. It lacks conformational flexibility and exists only in a planar configuration.")
 
         cyc_temp = st.slider("3. Temperature (Kelvin)", min_value=100, max_value=600, value=298, step=10, key="tab2_temp")
 
@@ -521,16 +542,24 @@ elif view_choice == "🔄 Cyclic Alkanes (Ring Conformations)":
         cyc_probabilities = cyc_boltzmann_factors / np.sum(cyc_boltzmann_factors)
         current_cyc_prob = cyc_probabilities[ring_step]
 
-        st.subheader("3D Structure (Interactive: Rotate & Zoom)")
-        cyc_mol = generate_cycloalkane_conformer(cyc_data["smiles"], cyc_data["coords"][eng_types[ring_step]])
+        col1, col2 = st.columns([3, 2])
 
-        view_cyc = py3Dmol.view(width=560, height=440)
-        view_cyc.addModel(Chem.MolToXYZBlock(cyc_mol), 'xyz')
-        view_cyc.setStyle({'stick': {'radius': 0.15}, 'sphere': {'scale': 0.25}})
-        view_cyc.zoomTo()
-        view_cyc.update()
+        with col1:
+            st.subheader("3D Structure (Interactive: Rotate & Zoom)")
+            cyc_mol = generate_cycloalkane_conformer(cyc_data["smiles"], cyc_data["coords"][eng_types[ring_step]])
 
-        render_robust_3d_view(view_cyc, height=440, width=560, unique_key=f"cyclic_view_{cyc_mol_choice}_{ring_step}")
+            view_cyc = py3Dmol.view(width=560, height=440)
+            view_cyc.addModel(Chem.MolToXYZBlock(cyc_mol), 'xyz')
+            view_cyc.setStyle({'stick': {'radius': 0.15}, 'sphere': {'scale': 0.25}})
+            view_cyc.zoomTo()
+            view_cyc.update()
+
+            render_robust_3d_view(view_cyc, height=440, width=560, unique_key=f"cyclic_view_{cyc_mol_choice}_{ring_step}")
+
+        with col2:
+            st.subheader("Conformation Note")
+            st.markdown(f"**{current_cyc_state}**")
+            st.markdown(get_conformation_description(current_cyc_state))
 
         st.markdown("---")
         col_graph1, col_graph2 = st.columns(2)
@@ -627,3 +656,12 @@ elif view_choice == "🔄 Cyclic Alkanes (Ring Conformations)":
         col_m1.metric("Current Conformation", current_cyc_state)
         col_m2.metric("Relative Strain Energy", f"{current_cyc_energy:.2f} kJ/mol")
         col_m3.metric("Probability Density", f"{current_cyc_prob:.5f}")
+
+
+# =========================================================================
+# CONDITIONAL EXECUTION (Calls the corresponding Fragment)
+# =========================================================================
+if view_choice == "🧬 Non-Cyclic Alkanes (Single Bond Rotation)":
+    render_non_cyclic_view()
+elif view_choice == "🔄 Cyclic Alkanes (Ring Conformations)":
+    render_cyclic_view()
