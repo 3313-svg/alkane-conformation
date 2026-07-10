@@ -22,34 +22,11 @@ if 'theta' not in st.session_state:
 def render_robust_3d_view(view, height=320, width=450, unique_key=""):
     """
     Renders the py3Dmol canvas inside a keyed st.container.
-
-    WHY THIS EXISTS
-    ----------------
-    st.components.v1.html() renders an <iframe> whose identity, in
-    Streamlit's frontend, is derived largely from a hash of its HTML
-    payload. If two separate calls to components.html() ever produce
-    byte-identical (or hash-colliding) payloads, Streamlit/the browser can
-    reuse the wrong <iframe> DOM node and paint one component's content
-    into another component's slot. We defend against that by stamping a
-    truly unique, never-repeating token into every single render's HTML
-    payload, so no two renders -- even of the exact same molecule -- can
-    ever hash-collide.
-
-    (Combined with the view-selector fix below -- which stops both
-    "tabs" from being mounted/updated simultaneously -- this closes out
-    the bug where changing the cycloalkane dropdown showed the stale
-    non-cyclic alkane viewer instead.)
     """
     html_string = view._make_html()
-
-    # A genuinely unique, single-use token (uuid4 has a collision
-    # probability low enough to be considered "never"). Embedding it as
-    # an HTML comment changes the payload's content/hash on every single
-    # render without changing what is visually displayed.
     cache_buster = uuid.uuid4().hex
     html_string += f"\n"
 
-    # Wrap in a keyed container to force virtual DOM isolation
     with st.container(key=unique_key):
         components.html(html_string, height=height, width=width)
 
@@ -360,15 +337,19 @@ if view_choice == "🧬 Non-Cyclic Alkanes (Single Bond Rotation)":
 
         st.slider("Slider:", 0, 360, key="theta")
 
+        # 세션 상태(theta)를 변경하기 위한 안전한 콜백 함수 정의
+        def update_theta(val):
+            st.session_state.theta = val
+
         col_r1_1, col_r1_2, col_r1_3 = st.columns(3)
-        if col_r1_1.button("0° 💥", use_container_width=True, key="btn_0"): st.session_state.theta = 0
-        if col_r1_2.button("60° 🍀", use_container_width=True, key="btn_60"): st.session_state.theta = 60
-        if col_r1_3.button("120° 💥", use_container_width=True, key="btn_120"): st.session_state.theta = 120
+        col_r1_1.button("0° 💥", use_container_width=True, key="btn_0", on_click=update_theta, args=(0,))
+        col_r1_2.button("60° 🍀", use_container_width=True, key="btn_60", on_click=update_theta, args=(60,))
+        col_r1_3.button("120° 💥", use_container_width=True, key="btn_120", on_click=update_theta, args=(120,))
 
         col_r2_1, col_r2_2, col_r2_3 = st.columns(3)
-        if col_r2_1.button("180° ✨", use_container_width=True, key="btn_180"): st.session_state.theta = 180
-        if col_r2_2.button("240° 💥", use_container_width=True, key="btn_240"): st.session_state.theta = 240
-        if col_r2_3.button("300° 🍀", use_container_width=True, key="btn_300"): st.session_state.theta = 300
+        col_r2_1.button("180° ✨", use_container_width=True, key="btn_180", on_click=update_theta, args=(180,))
+        col_r2_2.button("240° 💥", use_container_width=True, key="btn_240", on_click=update_theta, args=(240,))
+        col_r2_3.button("300° 🍀", use_container_width=True, key="btn_300", on_click=update_theta, args=(300,))
 
     with col_main:
         R_gas = 0.008314  
